@@ -36,6 +36,11 @@
               :installation="installation"
               @installing="installation.installing = true"
           />
+          <Complete
+              v-show="isStepActive('complete')"
+              :key="'complete'"
+              :site="site"
+          />
         </transition-group>
       </div>
     </div>
@@ -50,6 +55,7 @@ import Checks from "@/components/steps/Checks.vue"
 import License from "@/components/steps/License.vue";
 import FinalChecks from "@/components/steps/FinalChecks.vue";
 import Installation from "@/components/steps/Installation.vue";
+import Complete from "@/components/steps/Complete.vue";
 import {useStepsStore} from "@/stores/steps";
 import {onMounted, ref} from "vue";
 
@@ -63,6 +69,7 @@ export default {
     Configuration,
     FinalChecks,
     Installation,
+    Complete
   },
   setup() {
     const store = useStepsStore();

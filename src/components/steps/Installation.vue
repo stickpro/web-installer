@@ -48,6 +48,8 @@
 <script>
 import {computed, getCurrentInstance, onMounted, ref, watch} from "vue";
 import {useStep} from "@/composables/useStep";
+import complete from "@/components/steps/Complete.vue";
+import {useStepsStore} from "@/stores/steps";
 
 export default {
   name: "Installation",
@@ -73,10 +75,12 @@ export default {
       setupConfig: 'Configuring site',
       runMigrations: 'Running database migrations',
       createAdmin: 'Create administrator account',
+      updateFrontendPath: 'Update Frontend path url',
       cleanUp: 'Cleaning up',
     });
     const actioned = ref([]);
     const {proxy} = getCurrentInstance();
+    const store = useStepsStore();
     const {isActive} = useStep('installation', 'Installation')
     const progress = computed(() => {
       return Math.ceil((actioned.value.length / Object.keys(apiSteps.value).length) * 100) + '%';
@@ -95,6 +99,15 @@ export default {
           return;
         }
       }
+      complete()
+    }
+
+    const complete = () => {
+      store.setStatus({
+        id: 'installation',
+        status: 'complete',
+      })
+      store.goTo('complete')
     }
 
     const installStep = (endpoint) => {

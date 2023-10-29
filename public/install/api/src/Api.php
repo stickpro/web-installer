@@ -3,13 +3,16 @@
 namespace Merchant\Installer;
 
 use DirectoryIterator;
-use JetBrains\PhpStorm\NoReturn;
 use Illuminate\Database\Capsule\Manager as Capsule;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use JetBrains\PhpStorm\NoReturn;
 use Merchant\Installer\Exception\SSLValidationException;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use ReflectionMethod;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Winter\Packager\Composer;
 use ZipArchive;
 
@@ -20,9 +23,11 @@ class Api
 
     // Minimum PHP version that is unsupported for Merchant (upper limit)
     const MAX_PHP_VERSION = '8.999.999';
-    const MERCHANT_ARCHIVE = 'https://github.com/stickpro/dv-backend/archive/refs/tags/test.zip';
 
-    const ARCHIVE_SUBFOLDER = 'dv-backend-test/';
+    const BACKEND_URL_IN_FRONTEND = 'http://localhost:8080';
+    const MERCHANT_ARCHIVE = 'https://github.com/stickpro/dv-backend/archive/refs/tags/dv-pay-1.0.0.zip';
+
+    const ARCHIVE_SUBFOLDER = 'dv-backend-dv-pay-1.0.0/';
 
     protected $log;
 
@@ -195,24 +200,24 @@ class Api
 
         $dvZip = $this->workDir('dv-backend.zip');
 
-        if(!file_exists($dvZip)) {
+        if (!file_exists($dvZip)) {
             $this->log->notice('Try downloading DV PAY archive');
 
             try {
                 $fp = fopen($dvZip, 'w');
                 if (!$fp) {
                     $this->log->error('DV zip file unwritable', ['path' => $dvZip]);
-                    $this->error('Unable to write the Winter installation file');
+                    $this->error('Unable to write the DV PAY installation file');
                 }
                 $curl = curl_init();
 
                 curl_setopt_array($curl, [
-                    CURLOPT_URL => self::MERCHANT_ARCHIVE,
+                    CURLOPT_URL            => self::MERCHANT_ARCHIVE,
                     CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT => 300,
+                    CURLOPT_TIMEOUT        => 300,
                     CURLOPT_FOLLOWLOCATION => true,
-                    CURLOPT_MAXREDIRS => 5,
-                    CURLOPT_FILE => $fp
+                    CURLOPT_MAXREDIRS      => 5,
+                    CURLOPT_FILE           => $fp
                 ]);
 
                 if (file_exists($this->rootDir('.ignore-ssl'))) {
@@ -263,6 +268,7 @@ class Api
      * Extracts the downloaded ZIP file.
      *
      * @return void
+     * @throws \JsonException
      */
     public function postExtractDvPay(): void
     {
@@ -310,14 +316,85 @@ class Api
         $this->log->notice('Make artisan command-line tool executable', ['path' => $this->workDir('artisan')]);
         chmod($this->workDir('artisan'), 0755);
     }
+
+    public function postUpdateFrontendPath(): void
+    {
+        set_time_limit(120);
+
+        $this->log->notice('Begin replace backend url DV PAY archive');
+        $replaceString = $this->data['site']['url'] . '/' . $this->data['site']['backendUrl'];
+        $this->replaceInFiles($this->workDir('frontend'), self::BACKEND_URL_IN_FRONTEND, $replaceString);
+        $this->log->notice('Success update url');
+    }
+
+    protected function replaceInFiles($directory, $searchString, $replaceString)
+    {
+        $files = scandir($directory);
+
+        foreach ($files as $file) {
+            if ($file == '.' || $file == '..') {
+                continue;
+            }
+
+            $path = $directory . '/' . $file;
+
+            if (is_dir($path)) {
+                $this->replaceInFiles($path, $searchString, $replaceString);
+            } elseif (is_file($path) && pathinfo($path, PATHINFO_EXTENSION) == 'js') {
+                $content = file_get_contents($path);
+                $content = str_replace($searchString, $replaceString, $content);
+                file_put_contents($path, $content);
+            }
+        }
+    }
+
+    public function postCleanUp()
+    {
+        set_time_limit(120);
+        $this->log->notice('Removing installation files');
+        // Remove install files
+        @unlink($this->workDir('dv-backend.zip'));
+        @unlink($this->rootDir('install.html'));
+        @unlink($this->rootDir('install.zip'));
+        @unlink($this->rootDir('.ignore-ssl'));
+
+        // Remove install folders
+        $this->log->notice('Removing temporary installation folders');
+        $this->rimraf($this->rootDir('install'));
+        $this->rimraf($this->workDir('.composer'));
+
+        $this->log->notice('Moving files from temporary work directory to final installation path', [
+            'workDir' => $this->workDir(),
+            'installDir' => $this->rootDir(),
+        ]);
+
+        $dir = new DirectoryIterator($this->workDir());
+
+        foreach ($dir as $item) {
+            if ($item->isDot()) {
+                continue;
+            }
+
+            $relativePath = str_replace($this->workDir(), '', $item->getPathname());
+
+            rename($item->getPathname(), $this->rootDir($relativePath));
+        }
+        // Remove work directory
+        $this->log->notice('Removing work directory');
+        rmdir($this->workDir());
+
+        $this->log->notice('Installation complete!');
+    }
+
     /**
      * POST /api.php[endpoint=lockDependencies]
      *
      * Locks the Composer dependencies for DV PAY in composer.lock
      *
      * @return void
+     * @throws \JsonException
      */
-    public function postLockDependenciess()
+    public function postLockDependencies()
     {
         set_time_limit(360);
 
@@ -345,16 +422,196 @@ class Api
             if (!empty($e->getPrevious())) {
                 $this->log->error('Composer exception', ['exception' => $e->getPrevious()]);
             }
-            $this->error('Unable to determine dependencies for Winter CMS. ' . $e->getMessage());
+            $this->error('Unable to determine dependencies for DV PAY. ' . $e->getMessage());
         }
 
         $this->log->notice('Locked Composer packages', [
             'numPackages' => $update->getLockInstalledCount(),
-            'lockFile' => $this->workDir('composer.lock'),
+            'lockFile'    => $this->workDir('composer.lock'),
         ]);
 
         $this->data['packagesInstalled'] = $update->getLockInstalledCount();
 
+    }
+
+    /**
+     * POST /api.php[endpoint=installDependencies]
+     *
+     * Installs the locked depencies from the `lockDependencies` call.
+     *
+     * @return void
+     */
+    public function postInstallDependencies()
+    {
+        set_time_limit(180);
+        try {
+            $this->log->notice('Create Composer instance');
+            $composer = new Composer();
+            $this->log->notice('Set memory limit to 1.5GB');
+            $composer->setMemoryLimit(1536);
+            $this->log->notice('Set work directory for Composer', ['path' => $this->workDir()]);
+            $composer->setWorkDir($this->workDir());
+
+            $tmpHomeDir = $this->workDir('.composer');
+
+            if (!is_dir($tmpHomeDir)) {
+                $this->log->notice('Create home/cache directory for Composer', ['path' => $tmpHomeDir]);
+                mkdir($tmpHomeDir, 0755);
+            }
+
+            $this->log->notice('Set home/cache directory for Composer', ['path' => $tmpHomeDir]);
+            $composer->setHomeDir($tmpHomeDir);
+
+            $this->log->notice('Run Composer "install" command - install from lockfile');
+            $install = $composer->install(true, false, false, 'dist', true);
+        } catch (\Throwable $e) {
+            $this->error('Unable to determine dependencies for DV PAY. ' . $e->getMessage());
+        }
+
+        $this->log->notice('Installed Composer packages', [
+            'numPackages' => $install->getInstalledCount(),
+        ]);
+
+        $this->data['packagesInstalled'] = $install->getInstalledCount();
+    }
+
+    /**
+     * POST /api.php[endpoint=setupConfig]
+     *
+     * Rewrites the default configuration files with the values provided in the installer.
+     *
+     * @return void
+     */
+    public function postSetupConfig()
+    {
+        try {
+
+            $url = str_replace(array("http://", "https://"), "", $this->data['url']);
+            $envFileData =
+                /*App*/
+                'APP_NAME=\'' . 'DV PAY' . "'\n" .
+                'APP_ENV=' . 'production' . "\n" .
+                'APP_KEY=' . 'base64:' . base64_encode(Str::random(32)) . "\n" .
+                'APP_DEBUG=' . false . "\n" .
+                'APP_URL=' . $this->data['site']['url'] . '/' . $this->data['site']['backendUrl'] . '/' . "\n\n" .
+                'APP_DOMAIN=' . $url . "\n\n" .
+                /*Database*/
+                'DB_CONNECTION=' . $this->data['site']['database']['type'] . "\n" .
+                'DB_HOST=' . $this->data['site']['database']['host'] . "\n" .
+                'DB_PORT=' . $this->data['site']['database']['port'] . "\n" .
+                'DB_DATABASE=' . $this->data['site']['database']['name'] . "\n" .
+                'DB_USERNAME=' . $this->data['site']['database']['username'] . "\n" .
+                'DB_PASSWORD=' . $this->data['site']['database']['password'] . "\n\n" .
+
+                'BROADCAST_DRIVER=' . 'log' . "\n" .
+                'CACHE_DRIVER=' . 'file' . "\n" .
+                'FILESYSTEM_DRIVER=' . 'local' . "\n" .
+                'QUEUE_CONNECTION=' . 'redis' . "\n" .
+                'SESSION_DRIVER=' . 'file' . "\n" .
+                'SESSION_LIFETIME=' . '120' . "\n\n" .
+                /* Redis */
+                'REDIS_HOST=' . 'localhost' . "\n" .
+                'REDIS_PASSWORD=' . null . "\n" .
+                'REDIS_PORT=' . 6379 . "\n\n" .
+                /* Processing */
+                'PROCESSING_URL=' . 'http://80.93.179.251:8082' . "\n" .
+                'PROCESSING_CLIENT_ID=' . "\n" .
+                'PROCESSING_CLIENT_KEY=' . "\n" .
+                'PROCESSING_WEBHOOK_KEY=' . "\n\n" .
+                /* Something default value*/
+                'WEBHOOK_TIMEOUT=50' . "\n" .
+                'MIN_TRANSACTION_CONFIRMATIONS=1' . "\n" .
+                'RATE_SCALE=1' . "\n\n";
+
+            if ($this->copyEnv()) {
+                file_put_contents($this->workDir('.env'), $envFileData);
+            }
+
+        } catch (\Throwable $e) {
+            $this->error('Unable to write .env. ' . $e->getMessage());
+        }
+
+        // Force cache flush
+        $opcacheEnabled = ini_get('opcache.enable');
+        $opcachePath = trim(ini_get('opcache.restrict_api'));
+
+        if (!empty($opcachePath) && !starts_with(__FILE__, $opcachePath)) {
+            $opcacheEnabled = false;
+        }
+
+        if (function_exists('opcache_reset') && $opcacheEnabled) {
+            $this->log->notice('Flushing OPCache');
+            opcache_reset();
+        }
+        if (function_exists('apc_clear_cache')) {
+            $this->log->notice('Flushing APC Cache');
+            apc_clear_cache();
+        }
+    }
+
+    /**
+     * POST /api.php[endpoint=runMigrations]
+     *
+     * Runs the migrations.
+     *
+     * @return void
+     * @throws \JsonException
+     */
+    public function postRunMigrations()
+    {
+        set_time_limit(120);
+
+        try {
+            $this->bootFramework();
+            $this->log->notice('Running artisan "config:clear" command');
+            $output = new BufferedOutput();
+            \Illuminate\Support\Facades\Artisan::call('config:clear', [], $output);
+            $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+
+            $this->log->notice('Running database migrations');
+            $output = new BufferedOutput();
+            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true, '--seed' => true]);
+            $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+
+            $this->log->notice('Get Currency Rate');
+            $output = new BufferedOutput();
+            \Illuminate\Support\Facades\Artisan::call('cache:currency:rate');
+            $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+
+            $this->log->notice('Processing init');
+            $output = new BufferedOutput();
+            \Illuminate\Support\Facades\Artisan::call('processing:init');
+            $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+        } catch (\Throwable $e) {
+            $this->error('Unable to run migrations. ' . $e->getMessage());
+        }
+    }
+
+    public function postCreateAdmin()
+    {
+        try {
+            $this->bootFramework();
+
+            $this->log->notice('Finding initial admin account');
+            $admin = \App\Models\User::find(1);
+        } catch (\Throwable $e) {
+            $this->error('Unable to find administrator account. ' . $e->getMessage());
+        }
+
+        $admin->email = $this->data['site']['admin']['email'];
+        $admin->password = Hash::make($this->data['site']['admin']['password']);
+
+        try {
+            $this->log->notice('Changing admin account to details provided in installation');
+            $admin->save();
+        } catch (\Throwable $e) {
+            $this->error('Unable to save administrator account. ' . $e->getMessage());
+        }
+
+        $this->log->notice('Processing register owner');
+        $output = new BufferedOutput();
+        \Illuminate\Support\Facades\Artisan::call('register:processing:owner');
+        $this->log->notice('Command finished.', ['output' => $output->fetch()]);
     }
 
     /**
@@ -390,18 +647,58 @@ class Api
         $capsule = new Capsule();
 
         $capsule->addConnection([
-            'driver' => $dbConfig['type'],
-            'host' => $dbConfig['host'] ?? null,
-            'port' => $dbConfig['port'] ?? $this->getDefaultDbPort($dbConfig['type']),
-            'database' => $dbConfig['name'],
-            'username' => $dbConfig['user'] ?? '',
-            'password' => $dbConfig['pass'] ?? '',
-            'charset' => ($dbConfig['type'] === 'mysql') ? 'utf8mb4' : 'utf8',
+            'driver'    => $dbConfig['type'],
+            'host'      => $dbConfig['host'] ?? null,
+            'port'      => $dbConfig['port'] ?? $this->getDefaultDbPort($dbConfig['type']),
+            'database'  => $dbConfig['name'],
+            'username'  => $dbConfig['user'] ?? '',
+            'password'  => $dbConfig['pass'] ?? '',
+            'charset'   => ($dbConfig['type'] === 'mysql') ? 'utf8mb4' : 'utf8',
             'collation' => ($dbConfig['type'] === 'mysql') ? 'utf8mb4_unicode_ci' : null,
-            'prefix' => '',
+            'prefix'    => '',
         ]);
 
         return $capsule;
+    }
+
+    protected function copyEnv(): bool
+    {
+        if (!file_exists($this->workDir('.env'))) {
+            return copy($this->workDir('.env.example'), $this->workDir('.env'));
+        }
+        return true;
+    }
+
+
+    /**
+     * Boots the Laravel framework for use in some installation steps.
+     * @return void
+     * @throws \JsonException
+     */
+    protected function bootFramework()
+    {
+        $this->log->notice('Booting Laravel framework');
+
+        $autoloadFile = $this->workDir('bootstrap/autoload.php');
+        if (!file_exists($autoloadFile)) {
+            $this->error('Unable to load bootstrap file for framework from "' . $autoloadFile . '".');
+            return;
+        }
+
+        $this->log->notice('Loading autoloader');
+        require $autoloadFile;
+
+        $appFile = $this->workDir('bootstrap/app.php');
+
+        if (!file_exists($appFile)) {
+            $this->error('Unable to load application initialization file for framework from "' . $appFile . '".');
+            return;
+        }
+
+        $this->log->notice('Bootstrapping kernel');
+        $app = require_once $appFile;
+        $kernel = $app->make('Illuminate\Contracts\Console\Kernel');
+        $kernel->bootstrap();
     }
 
     /**
