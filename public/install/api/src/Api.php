@@ -486,11 +486,11 @@ class Api
     {
         try {
 
-            $url = str_replace(array("http://", "https://"), "", $this->data['url']);
+            $url = str_replace(array("http://", "https://"), "", $this->data['site']['url']);
             $envFileData =
                 /*App*/
                 'APP_NAME=\'' . 'DV PAY' . "'\n" .
-                'APP_ENV=' . 'production' . "\n" .
+                'APP_ENV=' . 'dev' . "\n" .
                 'APP_KEY=' . 'base64:' . base64_encode(Str::random(32)) . "\n" .
                 'APP_DEBUG=' . false . "\n" .
                 'APP_URL=' . $this->data['site']['url'] . '/' . $this->data['site']['backendUrl'] . '/' . "\n\n" .
@@ -500,8 +500,8 @@ class Api
                 'DB_HOST=' . $this->data['site']['database']['host'] . "\n" .
                 'DB_PORT=' . $this->data['site']['database']['port'] . "\n" .
                 'DB_DATABASE=' . $this->data['site']['database']['name'] . "\n" .
-                'DB_USERNAME=' . $this->data['site']['database']['username'] . "\n" .
-                'DB_PASSWORD=' . $this->data['site']['database']['password'] . "\n\n" .
+                'DB_USERNAME=' . $this->data['site']['database']['user'] . "\n" .
+                'DB_PASSWORD=' . $this->data['site']['database']['pass'] . "\n\n" .
 
                 'BROADCAST_DRIVER=' . 'log' . "\n" .
                 'CACHE_DRIVER=' . 'file' . "\n" .
@@ -570,12 +570,17 @@ class Api
 
             $this->log->notice('Running database migrations');
             $output = new BufferedOutput();
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true, '--seed' => true]);
+            \Illuminate\Support\Facades\Artisan::call('migrate', ['--no-interaction' => true], $output);
+            $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+
+            $this->log->notice('Running database seed');
+            $output = new BufferedOutput();
+            \Illuminate\Support\Facades\Artisan::call('db:seed', ['--no-interaction' => true], $output);
             $this->log->notice('Command finished.', ['output' => $output->fetch()]);
 
             $this->log->notice('Get Currency Rate');
             $output = new BufferedOutput();
-            \Illuminate\Support\Facades\Artisan::call('cache:currency:rate');
+            \Illuminate\Support\Facades\Artisan::call('cache:currency:rate', ['--no-interaction' => true], $output);
             $this->log->notice('Command finished.', ['output' => $output->fetch()]);
 
             $this->log->notice('Processing init');
@@ -689,7 +694,6 @@ class Api
         require $autoloadFile;
 
         $appFile = $this->workDir('bootstrap/app.php');
-
         if (!file_exists($appFile)) {
             $this->error('Unable to load application initialization file for framework from "' . $appFile . '".');
             return;
