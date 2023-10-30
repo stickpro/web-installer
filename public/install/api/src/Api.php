@@ -4,7 +4,6 @@ namespace Merchant\Installer;
 
 use DirectoryIterator;
 use Illuminate\Database\Capsule\Manager as Capsule;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use JetBrains\PhpStorm\NoReturn;
 use Merchant\Installer\Exception\SSLValidationException;
@@ -127,18 +126,18 @@ class Api
             'mbstring',
             'fileinfo',
             'openssl',
-//            'filter',
-//            'hash',
-//            'dom',
-//            'bcmath',
-//            'exif',
-//            'tokenizer',
-//            'JSON',
-//            'sockets',
-//            'gmp',
-//            'fileinfo',
-//            'XML',
-//            'ctype'
+            'filter',
+            'hash',
+            'dom',
+            'bcmath',
+            'exif',
+            'tokenizer',
+            'JSON',
+            'sockets',
+            'gmp',
+            'fileinfo',
+            'XML',
+            'ctype'
         ];
         foreach ($extensions as $ext) {
             $this->log->notice('Checking PHP "' . $ext . '" extension');
@@ -490,9 +489,9 @@ class Api
             $envFileData =
                 /*App*/
                 'APP_NAME=\'' . 'DV PAY' . "'\n" .
-                'APP_ENV=' . 'dev' . "\n" .
+                'APP_ENV=' . 'local' . "\n" .
                 'APP_KEY=' . 'base64:' . base64_encode(Str::random(32)) . "\n" .
-                'APP_DEBUG=' . false . "\n" .
+                'APP_DEBUG=' . true . "\n" .
                 'APP_URL=' . $this->data['site']['url'] . '/' . $this->data['site']['backendUrl'] . '/' . "\n\n" .
                 'APP_DOMAIN=' . $url . "\n\n" .
                 /*Database*/
@@ -514,7 +513,7 @@ class Api
                 'REDIS_PASSWORD=' . null . "\n" .
                 'REDIS_PORT=' . 6379 . "\n\n" .
                 /* Processing */
-                'PROCESSING_URL=' . 'http://80.93.179.251:8082' . "\n" .
+                'PROCESSING_URL=' . 'http://31.131.252.149:8082' . "\n" .
                 'PROCESSING_CLIENT_ID=' . "\n" .
                 'PROCESSING_CLIENT_KEY=' . "\n" .
                 'PROCESSING_WEBHOOK_KEY=' . "\n\n" .
@@ -604,7 +603,7 @@ class Api
         }
 
         $admin->email = $this->data['site']['admin']['email'];
-        $admin->password = Hash::make($this->data['site']['admin']['password']);
+        $admin->password = \Illuminate\Support\Facades\Hash::make($this->data['site']['admin']['password']);
 
         try {
             $this->log->notice('Changing admin account to details provided in installation');
