@@ -602,6 +602,11 @@ class Api
             $this->error('Unable to find administrator account. ' . $e->getMessage());
         }
 
+
+        $this->log->notice('Processing register owner');
+        $output = new BufferedOutput();
+        \Illuminate\Support\Facades\Artisan::call('register:processing:owner');
+
         $admin->email = $this->data['site']['admin']['email'];
         $admin->password = \Illuminate\Support\Facades\Hash::make($this->data['site']['admin']['password']);
 
@@ -612,9 +617,6 @@ class Api
             $this->error('Unable to save administrator account. ' . $e->getMessage());
         }
 
-        $this->log->notice('Processing register owner');
-        $output = new BufferedOutput();
-        \Illuminate\Support\Facades\Artisan::call('register:processing:owner');
         $this->log->notice('Command finished.', ['output' => $output->fetch()]);
     }
 
