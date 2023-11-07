@@ -10,6 +10,7 @@ use Merchant\Installer\Exception\SSLValidationException;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use mysqli;
 use ReflectionMethod;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Winter\Packager\Composer;
@@ -133,11 +134,11 @@ class Api
             'exif',
             'tokenizer',
             'JSON',
-            'sockets',
-            'gmp',
-            'fileinfo',
-            'XML',
-            'ctype'
+//            'sockets',
+//            'gmp',
+//            'fileinfo',
+//            'XML',
+//            'ctype'
         ];
         foreach ($extensions as $ext) {
             $this->log->notice('Checking PHP "' . $ext . '" extension');
@@ -618,6 +619,37 @@ class Api
         }
 
         $this->log->notice('Command finished.', ['output' => $output->fetch()]);
+    }
+
+    /**
+     * POST /api.php[endpoint=loadDatabase]
+     *
+     * Runs the migrations.
+     *
+     * @return void
+     * @throws \JsonException
+     */
+    public function postLoadDatabase(): void
+    {
+        $dbConfig = $this->data['site']['database'];
+
+        try {
+            $this->log->notice('Check database connection');
+            $capsule = $this->createCapsule($dbConfig);
+
+            $capsule->setAsGlobal();
+            $capsule->bootEloquent();
+
+            $databases = Capsule::select("SHOW DATABASES WHERE `Database` NOT IN ('mysql', 'performance_schema', 'sys', 'information_schema')");
+            $databaseNames = array_column($databases, 'Database');
+            $this->log->notice('Found ' . count($databaseNames) . ' databse(s)', ['databases' => implode(', ', $databaseNames)]);
+        } catch (\Throwable $e) {
+            $this->data['exception'] = $e->getMessage();
+            $this->error('Database could not be connected to.');
+        }
+
+        $this->data['databaseList'] =  $databaseNames;
+
     }
 
     /**

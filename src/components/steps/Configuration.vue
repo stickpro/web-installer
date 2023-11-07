@@ -126,33 +126,43 @@
                       tabindex="7"
                   >
                 </div>
-                <Field
-                    name="Database Name"
-                    mode="eager"
-                    rules="required"
-                    :immediate="false"
-                    v-slot="{ dirty, invalid, errors }"
-                    slim
+                <!--                <Field-->
+                <!--                    name="Database Name"-->
+                <!--                    mode="eager"-->
+                <!--                    rules="required"-->
+                <!--                    :immediate="false"-->
+                <!--                    v-slot="{ dirty, invalid, errors }"-->
+                <!--                    slim-->
+                <!--                >-->
+                <!--                  <div class="form-group" :class="{ 'has-error': dirty && invalid }">-->
+                <!--                    <label class="form-label label-required" for="databaseName">-->
+                <!--                      Database Name-->
+                <!--                    </label>-->
+                <!--                    <input-->
+                <!--                        type="text"-->
+                <!--                        class="form-input"-->
+                <!--                        id="databaseName"-->
+                <!--                        name="databaseName"-->
+                <!--                        placeholder="Enter the database name"-->
+                <!--                        v-model="site.database.name"-->
+                <!--                        tabindex="2"-->
+                <!--                    >-->
+                <!--                    <transition name="fade">-->
+                <!--                      <div v-if="dirty && errors.length" class="form-error" v-text="errors[0]">-->
+                <!--                      </div>-->
+                <!--                    </transition>-->
+                <!--                  </div>-->
+                <!--                </Field>-->
+                <label class="form-label" for="databaseName">Database Name</label>
+                <select
+                    class="form-select"
+                    id="databaseName"
+                    name="databaseName"
+                    tabindex="4"
+                    v-model="site.database.name"
                 >
-                  <div class="form-group" :class="{ 'has-error': dirty && invalid }">
-                    <label class="form-label label-required" for="databaseName">
-                      Database Name
-                    </label>
-                    <input
-                        type="text"
-                        class="form-input"
-                        id="databaseName"
-                        name="databaseName"
-                        placeholder="Enter the database name"
-                        v-model="site.database.name"
-                        tabindex="2"
-                    >
-                    <transition name="fade">
-                      <div v-if="dirty && errors.length" class="form-error" v-text="errors[0]">
-                      </div>
-                    </transition>
-                  </div>
-                </Field>
+                  <option v-for="database in databaseList">{{ database }}</option>
+                </select>
               </div>
               <div class="column">
                 <Field
@@ -269,6 +279,14 @@
               </div>
             </div>
           </Tab>
+          <Tab title="Processing">
+            <div class="columns">
+              <div class="column">
+                <div class="form-group">
+                </div>
+              </div>
+            </div>
+          </Tab>
         </Tabs>
       </div>
       <div class="step-actions">
@@ -298,7 +316,7 @@
 
 <script>
 import {useStep} from "@/composables/useStep";
-import {ref, watch} from "vue";
+import {getCurrentInstance, ref, watch} from "vue";
 import {defineRule, Field, Form} from 'vee-validate'
 import {required} from '@vee-validate/rules'
 import Tabs from '@/components/Tabs.vue';
@@ -351,7 +369,10 @@ export default {
     const site = ref(props.site);
     const form = ref(null)
     const tabIndex = ref(0);
-    const passwordVisible = ref(false)
+    const passwordVisible = ref(false);
+    const databaseList = ref(['qwe']);
+
+    const {proxy} = getCurrentInstance();
 
 
     const togglePasswordVisibility = () => {
@@ -369,13 +390,23 @@ export default {
       site.value = newSite;
     });
 
+    watch(() => props.site.database, (newDatabase, oldDatabase) => {
+      proxy.$api('POST', 'loadDatabase', {site: props.site}).then(
+          (response) => {
+            databaseList.value = response.data.databaseList
+          }
+      )
+    }, {deep: true});
+
+
     return {
       site,
       tabIndex,
       togglePasswordVisibility,
       passwordVisible,
       form,
-      complete
+      complete,
+      databaseList
     }
 
   }

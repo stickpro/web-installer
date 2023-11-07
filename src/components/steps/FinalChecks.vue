@@ -122,6 +122,7 @@ export default {
     };
 
     const onPress = () => {
+      // DELETE
       complete()
       return;
       if (checksSuccessful.value) {
