@@ -19,7 +19,7 @@ use ZipArchive;
 class Api
 {
     // Minimum PHP version required for Merchant
-    const MIN_PHP_VERSION = '8.0.2';
+    const MIN_PHP_VERSION = '8.2.0';
 
     // Minimum PHP version that is unsupported for Merchant (upper limit)
     const MAX_PHP_VERSION = '8.999.999';
@@ -161,17 +161,18 @@ class Api
         set_time_limit(60);
 
         $dbConfig = $this->data['site']['database'];
-
         try {
             $this->log->notice('Check database connection');
             $capsule = $this->createCapsule($dbConfig);
 
             if (is_null($dbConfig['name'])) {
+                $capsule->setAsGlobal();
+                $capsule->bootEloquent();
                 $newDatabaseName = 'merchant';
                 $this->createDatabase($capsule, $newDatabaseName);
                 $dbConfig['name'] = $newDatabaseName;
             }
-
+            $capsule = $this->createCapsule($dbConfig);
             $connection = $capsule->getConnection();
 
             $tables = $connection->getDoctrineSchemaManager()->listTableNames();
@@ -191,8 +192,14 @@ class Api
 
     private function createDatabase($capsule, $databaseName)
     {
-        $query = "CREATE DATABASE IF NOT EXISTS $databaseName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
-        $capsule::connection()->statement($query);
+        $this->log->notice('Try create database');
+        try {
+            $query = "CREATE DATABASE IF NOT EXISTS $databaseName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+            $capsule::connection()->statement($query);
+        } catch (\Throwable $e) {
+            $this->data['exception'] = $e->getMessage();
+            $this->error('Database could not be create');
+        }
     }
 
     /**
