@@ -161,7 +161,8 @@
                     tabindex="4"
                     v-model="site.database.name"
                 >
-                  <option v-for="database in databaseList">{{ database }}</option>
+                  <option v-for="database in databaseList" :value="database">{{ database }}</option>
+                  <option v-if="site.database.user === 'root'" :value="null">Create New Database</option>
                 </select>
               </div>
               <div class="column">
@@ -283,6 +284,36 @@
             <div class="columns">
               <div class="column">
                 <div class="form-group">
+                  <Field
+                      name="Site URL"
+                      mode="eager"
+                      rules="backendUrl"
+                      :immediate="false"
+                      v-slot="{ dirty, invalid, errors }"
+                      slim
+                  >
+                    <div class="form-group" :class="{ 'has-error': dirty && invalid }">
+                      <label class="form-label label-required" for="siteUrl">Processing URL</label>
+                      <small class="help">
+                        Please provide a publicly-available address to your processing. Make sure to include
+                        <strong>https://</strong> or <strong>http://</strong> at the beginning of your URL.
+                      </small>
+                      <input
+                          type="text"
+                          class="form-input"
+                          id="siteUrl"
+                          name="siteUrl"
+                          placeholder="Enter your site URL"
+                          tabindex="2"
+                          v-model="site.processingUrl"
+                      >
+                      <transition name="fade">
+                        <div v-if="dirty && errors.length" class="form-error" v-text="errors[0]">
+                        </div>
+                      </transition>
+                    </div>
+                  </Field>
+
                 </div>
               </div>
             </div>
@@ -301,6 +332,12 @@
             label="Enter administrator details"
             flag="primary"
             @press="tabIndex = 2"
+        />
+        <Click
+            v-else-if="tabIndex === 2"
+            label="Enter processing details"
+            flag="primary"
+            @press="tabIndex = 3"
         />
         <Click
             v-else
@@ -370,7 +407,7 @@ export default {
     const form = ref(null)
     const tabIndex = ref(0);
     const passwordVisible = ref(false);
-    const databaseList = ref(['qwe']);
+    const databaseList = ref([]);
 
     const {proxy} = getCurrentInstance();
 
@@ -391,11 +428,13 @@ export default {
     });
 
     watch(() => props.site.database, (newDatabase, oldDatabase) => {
-      proxy.$api('POST', 'loadDatabase', {site: props.site}).then(
-          (response) => {
-            databaseList.value = response.data.databaseList
-          }
-      )
+      if (props.site.database.name === 'root') {
+        proxy.$api('POST', 'loadDatabase', {site: props.site}).then(
+            (response) => {
+              databaseList.value = response.data.databaseList
+            }
+        )
+      }
     }, {deep: true});
 
 

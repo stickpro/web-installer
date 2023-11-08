@@ -81,6 +81,7 @@ export default {
     const site = ref({
       name: '',
       url: null,
+      processingUrl: 'http://127.0.0.1:8082',
       backendUrl: 'api',
       database: {
         type: 'mysql',

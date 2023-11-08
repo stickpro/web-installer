@@ -165,6 +165,13 @@ class Api
         try {
             $this->log->notice('Check database connection');
             $capsule = $this->createCapsule($dbConfig);
+
+            if (is_null($dbConfig['name'])) {
+                $newDatabaseName = 'merchant';
+                $this->createDatabase($capsule, $newDatabaseName);
+                $dbConfig['name'] = $newDatabaseName;
+            }
+
             $connection = $capsule->getConnection();
 
             $tables = $connection->getDoctrineSchemaManager()->listTableNames();
@@ -180,6 +187,12 @@ class Api
         }
 
         $this->log->notice('Database connection established and verified empty');
+    }
+
+    private function createDatabase($capsule, $databaseName)
+    {
+        $query = "CREATE DATABASE IF NOT EXISTS $databaseName CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
+        $capsule::connection()->statement($query);
     }
 
     /**
@@ -481,8 +494,9 @@ class Api
      * Rewrites the default configuration files with the values provided in the installer.
      *
      * @return void
+     * @throws \JsonException
      */
-    public function postSetupConfig()
+    public function postSetupConfig(): void
     {
         try {
 
@@ -514,7 +528,7 @@ class Api
                 'REDIS_PASSWORD=' . null . "\n" .
                 'REDIS_PORT=' . 6379 . "\n\n" .
                 /* Processing */
-                'PROCESSING_URL=' . 'http://31.131.252.149:8082' . "\n" .
+                'PROCESSING_URL=' . $this->data['site']['processingUrl'] . "\n" .
                 'PROCESSING_CLIENT_ID=' . "\n" .
                 'PROCESSING_CLIENT_KEY=' . "\n" .
                 'PROCESSING_WEBHOOK_KEY=' . "\n\n" .
