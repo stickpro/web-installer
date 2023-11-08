@@ -428,7 +428,7 @@ export default {
     });
 
     watch(() => props.site.database, (newDatabase, oldDatabase) => {
-      if (props.site.database.name === 'root') {
+      if (props.site.database.user === 'root') {
         proxy.$api('POST', 'loadDatabase', {site: props.site}).then(
             (response) => {
               databaseList.value = response.data.databaseList
